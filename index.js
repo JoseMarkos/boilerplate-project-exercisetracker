@@ -4,7 +4,7 @@ const cors = require('cors')
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const User  = require('./models/user.model');
-const Log  = require('./models/log.model');
+const Exercise  = require('./models/exercise.model');
 require('dotenv').config()
 
 app.use(cors())
@@ -16,7 +16,6 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
 mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
-
 // Manejar eventos de conexión de Mongoose
 mongoose.connection.on('connected', () => {
   console.log('Connected to MongoDB');
@@ -43,65 +42,54 @@ app.post(
       });
       const savedUser = await newUser.save();
 
-
       res.json({
         username: savedUser.username,
         _id: savedUser._id
       });
     } catch (error) {
       console.error('Error creating user:', error);
+
       res.status(500).json({ error: 'Internal server error' });
     }
+  }
+);
+app.get(
+  '/api/users', 
+  async (req, res) => {
+    res.json(await User.find());
   }
 );
 
 app.post('/api/users/:id/exercises', async (req, res) => {
   try {
     const { description, duration, date } = req.body;
-    const userId = req.params.id;
-    const user = await User.findById(userId);
-
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    let log = await Log.findById(userId);
-    if (!log) {
-      log = new Log({
-        _id: userId,
-        username: user.username,
-        log: []
-      });
-    }
-    console.log(log)
-    durationInt = parseInt(duration);
-    finalDate = getDate(date); 
-    log.log.push({
+    theDuration = parseInt(duration);
+    theDate = getDate(date); 
+    let exercise = new Exercise({
+      owner: user._id,
       description: description,
-      duration: durationInt,
-      date: finalDate?.date || new Date()
+      duration: theDuration,
+      date: theDate?.date || new Date()
     });
-    if (!log.count) {
-      log.count = log.count + 1;
-      const savedLog = await log.save();
-    } else {
-      log.count = log.count + 1;
-      const savedLog = await Log.updateOne(log);
-    }
+    const exerciseSaved = await exercise.save();
 
     res.json({
+      _id: user._id,
       username: user.username,
-      description: description,
-      duration: durationInt,
-      date: finalDate?.formatted,
-      _id: user._id
+      description: exerciseSaved.description,
+      duration: exerciseSaved.duration,
+      date: theDate?.formatted
     });
   } catch (error) {
     console.error('Error creating exercise:', error);
+
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 function getDate(dateinput) {
   dateinput = new Date(dateinput);
@@ -110,7 +98,6 @@ function getDate(dateinput) {
     if (isNaN(time)) {
       return null;
     }
-
     dateinput = new Date(time);
   }
   const options = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' };
@@ -122,36 +109,47 @@ function getDate(dateinput) {
 
 app.get('/api/users/:_id/logs', async (req, res) => {
   try {
-    const _id = req.params._id;
+    const owner = req.params._id;
+    const user = await User.findById(owner);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
     let { from, to, limit } = req.query;
-
     if (from) from = new Date(from);
     if (to) to = new Date(to);
-
-    const query = { _id };
-
-    if (from) query['log.date'] = { $gte: from };
-    if (to) query['log.date'] = { ...query['log.date'], $lte: to };
-
+    const query = { owner };
+    if (from) query.date = { $gte: from };
+    if (to) query.date = { ...query.date, $lte: to };
     let logsQuery;
-    console.log(query);
-  
     if (from) {
-      logsQuery = Log.find(query);
-      console.log('from');
+      logsQuery = Exercise.find(query);
     } else {
-      logsQuery = Log.find();
-      console.log('no from');
+      logsQuery = Exercise.find();
     }
-    // console.log('logsQuery')
-    // console.log(logsQuery);
     if (limit) logsQuery = logsQuery.limit(parseInt(limit));
+    logsQuery.select('description duration date');
+    let logs = await logsQuery.exec();
+    let arr = [];
+    logs.forEach(
+      log => {
+        let _log = { 
+          description: log.description,
+          duration : log.duration,
+          date: new Date(log.date).toDateString()
+         };
+        arr.push(_log);
+      }
+    )
 
-    const logs = await logsQuery.exec();
-
-    res.json(logs);
+    res.json({
+      username: user.username,
+      count: logs.length,
+      _id: user._id,
+      log: arr
+    });
   } catch (error) {
     console.error('Error fetching exercise logs:', error);
+
     res.status(500).json({ error: 'Internal server error' });
   }
 });
