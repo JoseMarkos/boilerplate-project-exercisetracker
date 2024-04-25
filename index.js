@@ -67,45 +67,34 @@ app.post('/api/users/:id/exercises', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    theDuration = parseInt(duration);
-    theDate = getDate(date); 
+    let theDuration = parseInt(duration);
+    let theDate;
+    if(date == undefined) theDate = new Date();
+    else theDate = new Date(date);
+    console.log(theDate) 
     let exercise = new Exercise({
       owner: user._id,
       description: description,
       duration: theDuration,
-      date: theDate?.date || new Date()
+      date: theDate
     });
     const exerciseSaved = await exercise.save();
-
-    res.json({
+    const response = {
       _id: user._id,
       username: user.username,
       description: exerciseSaved.description,
       duration: exerciseSaved.duration,
-      date: theDate?.formatted
-    });
+      date: theDate.toDateString()
+    } 
+    // console.log(response);
+    
+    res.json(response);
   } catch (error) {
     console.error('Error creating exercise:', error);
 
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-function getDate(dateinput) {
-  dateinput = new Date(dateinput);
-  if ("Invalid Date" == dateinput) {
-    const time = parseInt(dateinput);
-    if (isNaN(time)) {
-      return null;
-    }
-    dateinput = new Date(time);
-  }
-  const options = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' };
-  const dateFormatter = new Intl.DateTimeFormat('en-US', options);
-  const formattedDate = dateFormatter.format(dateinput);
-
-  return { date: dateinput, formatted: formattedDate};
-}
 
 app.get('/api/users/:_id/logs', async (req, res) => {
   try {
@@ -127,26 +116,20 @@ app.get('/api/users/:_id/logs', async (req, res) => {
       logsQuery = Exercise.find();
     }
     if (limit) logsQuery = logsQuery.limit(parseInt(limit));
-    logsQuery.select('description duration date');
-    let logs = await logsQuery.exec();
-    let arr = [];
-    logs.forEach(
-      log => {
-        let _log = { 
-          description: log.description,
-          duration : log.duration,
-          date: new Date(log.date).toDateString()
-         };
-        arr.push(_log);
-      }
-    )
-
-    res.json({
+   // logsQuery.select('description duration date');
+    const log = await logsQuery.exec();
+    let response = {
       username: user.username,
-      count: logs.length,
+      count: log.length,
       _id: user._id,
-      log: arr
-    });
+      log: log.map(e => ({
+            description: e.description,
+            duration: e.duration,
+            date: e.date.toDateString()
+          }))
+    };
+    
+    return res.json(response);
   } catch (error) {
     console.error('Error fetching exercise logs:', error);
 
