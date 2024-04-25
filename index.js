@@ -62,33 +62,34 @@ app.get(
 
 app.post('/api/users/:id/exercises', async (req, res) => {
   try {
-    const { description, duration, date } = req.body;
+    let { description, duration, date } = req.body;
     const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     let theDuration = parseInt(duration);
-    let theDate;
-    if(date == undefined) theDate = new Date();
-    else theDate = new Date(date);
-    console.log(theDate) 
+    if(date == undefined) {
+      date = new Date();
+    } else {
+      date = new Date(date);
+    } 
     let exercise = new Exercise({
       owner: user._id,
       description: description,
       duration: theDuration,
-      date: theDate
+      date: date
     });
     const exerciseSaved = await exercise.save();
     const response = {
-      _id: user._id,
       username: user.username,
       description: exerciseSaved.description,
       duration: exerciseSaved.duration,
-      date: theDate.toDateString()
+      date: date.toDateString(),
+      _id: user._id
     } 
-    // console.log(response);
+    console.log(response);
     
-    res.json(response);
+    return res.json(response);
   } catch (error) {
     console.error('Error creating exercise:', error);
 
@@ -116,9 +117,9 @@ app.get('/api/users/:_id/logs', async (req, res) => {
       logsQuery = Exercise.find();
     }
     if (limit) logsQuery = logsQuery.limit(parseInt(limit));
-   // logsQuery.select('description duration date');
+    logsQuery.select('description duration date');
     const log = await logsQuery.exec();
-    let response = {
+    const response = {
       username: user.username,
       count: log.length,
       _id: user._id,
@@ -128,6 +129,7 @@ app.get('/api/users/:_id/logs', async (req, res) => {
             date: e.date.toDateString()
           }))
     };
+    console.log(response);
     
     return res.json(response);
   } catch (error) {
